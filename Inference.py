@@ -132,3 +132,61 @@ class GPTModel(nn.Module):
         x = self.final_norm(x)
         return self.out_head(x)
 
+
+
+
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+num_classes = 2
+
+model = GPTModel(BASE_CONFIG)
+model.out_head = nn.Linear(BASE_CONFIG["emb_dim"], num_classes)
+
+state_dict = torch.load("cfmodel.pth", map_location=device)
+model.load_state_dict(state_dict )
+model = model.to(device)
+model.eval()
+
+
+
+tokenizer = tiktoken.get_encoding("gpt2")
+
+
+
+
+train_df = pd.read_csv("train.csv")
+
+def get_max_length(texts):
+    return max(len(tokenizer.encode(text)) for text in texts)
+
+max_length = get_max_length(train_df["Text"])                             #maximum length of input text sequences
+
+
+
+
+def classify_text(text, model, tokenizer, device, max_length, pad_token_id=50256):
+    model.eval()
+
+    input_ids = tokenizer.encode(text)
+    input_ids = input_ids[:max_length]
+    input_ids += [pad_token_id] * (max_length - len(input_ids))
+
+    input_tensor = torch.tensor(input_ids, dtype=torch.long).unsqueeze(0).to(device)
+
+    with torch.no_grad():
+        logits = model(input_tensor)[:, -1, :]
+        pred = torch.argmax(logits, dim=-1).item()
+
+    return "spam" if pred == 1 else "not spam"
+
+
+
+
+text_1 = "Congratulations! You've won a $1000 Walmart gift card. Click here to claim your prize."
+text_2 = "Hi, your KYC is pending. Please update today to avoid service interruption.."
+
+print(text_1, "->", classify_text(text_1, model, tokenizer, device, max_length))
+print(text_2, "->", classify_text(text_2, model, tokenizer, device, max_length))
+
+
